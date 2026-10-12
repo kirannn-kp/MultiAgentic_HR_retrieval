@@ -1,0 +1,6 @@
+.azure
+.venv-hosted
+azure.yaml
+src/risk-orchestrator/mbpoc
+src/risk-orchestrator/config
+src/risk-orchestrator/__pycache__

@@ -1,0 +1,53 @@
+# Risk criteria + routing thresholds for the Risk Assessment Orchestrator.
+# This file is the single source of truth: it is rendered into the risk agent's instructions
+# (scripts/04_create_agents.py) and used by the deterministic policy gate and the offline mock.
+
+thresholds:
+  confidence_min: 0.60   # below -> escalate to human ("score low")
+  quality_min: 0.70      # evaluator score below -> escalate ("insufficient answer quality")
+
+# Risk level definitions. HIGH always goes to a human, LOW/MEDIUM may be answered by AI.
+criteria:
+  - id: employment-law
+    level: HIGH
+    area: legal
+    description: Termination, dismissal, severance, disciplinary action, litigation, labour-law disputes.
+    keywords: [terminate, termination, dismissal, dismiss, fired, severance, lawsuit, litigation, disciplinary, redundancy, layoff]
+  - id: personal-data
+    level: HIGH
+    area: compliance
+    description: Processing of personal or special-category data, GDPR / data subject requests, data breaches.
+    keywords: [gdpr, breach, data subject, personal data, special category, dpo]
+  - id: whistleblowing
+    level: HIGH
+    area: compliance
+    description: Misconduct, harassment, discrimination, bribery, whistleblowing reports.
+    keywords: [harassment, discrimination, bribery, corruption, whistleblow, misconduct, fraud]
+  - id: cross-border-tax
+    level: HIGH
+    area: tax
+    description: Cross-border work, social security / tax residency, permanent-establishment risk.
+    keywords: [abroad, overseas, cross-border, tax residency, permanent establishment, social security, expat]
+  - id: works-council
+    level: MEDIUM
+    area: compliance
+    description: Topics subject to works-council co-determination (working time, monitoring, shift models).
+    keywords: [works council, co-determination, overtime, shift, monitoring]
+  - id: financial-benefits
+    level: MEDIUM
+    area: tax
+    description: Taxable benefits, company car, allowances, expense exceptions.
+    keywords: [company car, taxable, allowance, benefit in kind, expense exception]
+  - id: general-policy
+    level: LOW
+    area: general
+    description: Routine HR policy information (leave, remote work rules, travel booking, expense limits).
+    keywords: []
+
+# How the evaluator agent scores an answer (each dimension 0..1, final score = weighted mean).
+evaluation:
+  weights:
+    groundedness: 0.4
+    relevance: 0.3
+    completeness: 0.2
+    policy_compliance: 0.1

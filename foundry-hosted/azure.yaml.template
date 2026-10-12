@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+requiredVersions:
+    azd: '>=1.27.1'
+    extensions:
+        azure.ai.agents: '>=1.0.0-beta.9'
+name: mb-risk-orchestrator
+services:
+    risk-orchestrator:
+        project: src/risk-orchestrator
+        host: azure.ai.agent
+        language: python
+        uses:
+            - ai-project
+        env:
+            AZURE_AI_MODEL_DEPLOYMENT_NAME: __MODEL__
+            MOCK_MODE: "false"
+            MODEL_DEPLOYMENT_NAME: __MODEL__
+            SEARCH_ENDPOINT: __SEARCH_ENDPOINT__
+            SEARCH_API_VERSION: __SEARCH_API_VERSION__
+            KNOWLEDGE_BASE_NAME: __KB_NAME__
+            KB_CONNECTION_NAME: __KB_CONNECTION__
+            AGENT_RISK: __AGENT_RISK__
+            AGENT_EVALUATOR: __AGENT_EVALUATOR__
+            AGENT_SERVICENOW: __AGENT_SERVICENOW__
+            AGENT_MB_CHAT: __AGENT_MB_CHAT__
+        codeConfiguration:
+            dependencyResolution: remote_build
+            entryPoint: main.py
+            runtime: python_3_13
+        container:
+            resources:
+                cpu: "0.5"
+                memory: 1Gi
+        description: Risk Assessment Orchestrator for HR and compliance consultations. A Microsoft Agent Framework workflow that grounds answers in Foundry IQ (SharePoint and web), scores confidence, risk and answer quality, and escalates to a human via ServiceNow (acknowledgement only).
+        kind: hosted
+        metadata:
+            tags:
+                - Agent Framework
+                - Workflow
+                - Foundry IQ
+                - Responses Protocol
+        name: risk-orchestrator
+        protocols:
+            - protocol: responses
+              version: 2.0.0
+    ai-project:
+        host: azure.ai.project
+        endpoint: __PROJECT_ENDPOINT__
+infra:
+    provider: microsoft.foundry

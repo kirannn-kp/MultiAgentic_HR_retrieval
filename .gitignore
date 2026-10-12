@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+.azure/
+*.egg-info/
+runtime/
+data/sharepoint_export/
+dist/
+.venv-hosted/

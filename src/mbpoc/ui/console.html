@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Consultation Assistant · Agent Orchestration Console</title>
+<style>
+  :root {
+    --bg:#f3f5f8; --surface:#ffffff; --border:#d8dde4; --border-strong:#b9c1cc;
+    --text:#1b2430; --muted:#5d6978; --accent:#0b4f7c; --accent-soft:#e6f0f7;
+    --idle:#9aa5b1; --working:#0a64c8; --done:#1e7b4f; --escalated:#b45309; --error:#b42318; --skipped:#c3cad2;
+    --mono: "Cascadia Mono", Consolas, "SFMono-Regular", monospace;
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--text); font:13px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif; display:flex; flex-direction:column; }
+
+  header { background:var(--surface); border-bottom:1px solid var(--border); padding:6px 20px; min-height:52px; display:flex; align-items:center; gap:20px; flex:none; }
+  header .brand { white-space:nowrap; font-weight:600; font-size:15px; letter-spacing:.1px; }
+  header .brand span { color:var(--muted); font-weight:400; margin-left:8px; }
+  header .spacer { flex:1; }
+  .meta { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px 18px; color:var(--muted); font-size:12px; align-items:center; }
+  .meta b { color:var(--text); font-weight:600; }
+  .pill { white-space:nowrap; border:1px solid var(--border-strong); border-radius:3px; padding:1px 8px; font-size:11px; font-weight:600; letter-spacing:.4px; text-transform:uppercase; }
+  .pill.live { color:var(--done); border-color:var(--done); } .pill.mock { color:var(--escalated); border-color:var(--escalated); }
+  .conn::before { content:""; display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--error); margin-right:6px; }
+  .conn.ok::before { background:var(--done); }
+
+  main { flex:1; min-height:0; display:grid; grid-template-columns:330px minmax(0,1fr) 410px; gap:14px; padding:14px 20px 20px; }
+  .panel { background:var(--surface); border:1px solid var(--border); border-radius:4px; display:flex; flex-direction:column; min-height:0; }
+  .panel > h2 { margin:0; padding:11px 16px; font-size:12px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; color:var(--muted); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  .panel > h2 button { font:inherit; text-transform:none; letter-spacing:0; }
+  .body { overflow:auto; flex:1; min-height:0; }
+
+  button, select { font:inherit; color:var(--text); }
+  .btn { background:var(--surface); border:1px solid var(--border-strong); border-radius:3px; padding:5px 12px; cursor:pointer; }
+  .btn:hover { border-color:var(--accent); color:var(--accent); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .btn.primary:hover { background:#093f63; color:#fff; }
+  .btn:disabled { opacity:.55; cursor:not-allowed; }
+  .link { background:none; border:0; color:var(--accent); cursor:pointer; padding:0; }
+
+  /* chat */
+  .testcase { padding:12px 16px; border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:8px; background:#fafbfc; }
+  .testcase label { font-size:12px; color:var(--muted); font-weight:600; }
+  .testcase .row { display:flex; gap:8px; }
+  select { flex:1; min-width:0; padding:6px 8px; border:1px solid var(--border-strong); border-radius:3px; background:var(--surface); }
+  #chat { padding:16px; display:flex; flex-direction:column; gap:12px; }
+  .empty { color:var(--muted); text-align:center; margin-top:40px; padding:0 20px; }
+  .msg { max-width:92%; padding:10px 12px; border-radius:4px; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .msg.user { align-self:flex-end; background:var(--accent-soft); border:1px solid #c5dbec; }
+  .msg.bot { align-self:flex-start; background:var(--surface); border:1px solid var(--border); }
+  .msg .who { display:block; font-size:11px; font-weight:600; letter-spacing:.4px; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+  .msg .status { display:inline-block; margin-bottom:6px; font-size:11px; font-weight:600; letter-spacing:.4px; text-transform:uppercase; padding:1px 7px; border-radius:3px; border:1px solid; }
+  .status.ANSWERED { color:var(--done); border-color:var(--done); } .status.ESCALATED { color:var(--escalated); border-color:var(--escalated); }
+  .status.ERROR { color:var(--error); border-color:var(--error); } .status.CLARIFY { color:var(--accent); border-color:var(--accent); }
+  form.compose { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--border); }
+  form.compose input { flex:1; min-width:0; padding:8px 10px; border:1px solid var(--border-strong); border-radius:3px; font:inherit; }
+  form.compose input:focus, select:focus { outline:2px solid var(--accent-soft); border-color:var(--accent); }
+
+  /* flow */
+  .stage { padding:10px 16px 0; overflow:hidden; }
+  #flowWrap { width:100%; position:relative; }
+  #flow { position:absolute; left:0; top:0; width:880px; height:460px; transform-origin:0 0; }
+  #flow svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  .edge { stroke:var(--border-strong); stroke-width:1.5; fill:none; }
+  .edge.active { stroke:var(--working); stroke-width:2.25; stroke-dasharray:6 4; animation:flow .7s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset:-10; } }
+  .edgelabel { font-size:10.5px; fill:var(--muted); text-anchor:middle; paint-order:stroke; stroke:#fff; stroke-width:4px; }
+  .edgelabel.active { fill:var(--working); font-weight:600; }
+  .node { position:absolute; width:172px; height:118px; background:var(--surface); border:1px solid var(--border-strong); border-left:4px solid var(--idle); border-radius:3px; padding:8px 10px 8px 12px; display:flex; flex-direction:column; }
+  .node .name { font-weight:600; font-size:13px; line-height:1.25; }
+  .node .role { color:var(--muted); font-size:11px; line-height:1.3; margin-top:2px; }
+  .node .host { color:var(--muted); font-size:10.5px; margin-top:auto; text-transform:uppercase; letter-spacing:.4px; }
+  .node .stat { display:flex; gap:6px; align-items:baseline; font-size:11.5px; margin-top:3px; min-height:17px; }
+  .node .state { font-weight:600; text-transform:capitalize; }
+  .node .detail { color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .node[data-state="working"] { border-left-color:var(--working); background:#f5f9ff; } .node[data-state="working"] .state { color:var(--working); }
+  .node[data-state="done"] { border-left-color:var(--done); } .node[data-state="done"] .state { color:var(--done); }
+  .node[data-state="escalated"] { border-left-color:var(--escalated); } .node[data-state="escalated"] .state { color:var(--escalated); }
+  .node[data-state="error"] { border-left-color:var(--error); } .node[data-state="error"] .state { color:var(--error); }
+  .node[data-state="skipped"] { border-left-color:var(--skipped); opacity:.6; } .node[data-state="skipped"] .state { color:var(--muted); }
+  .node[data-state="working"]::after { content:""; position:absolute; top:10px; right:10px; width:8px; height:8px; border-radius:50%; background:var(--working); animation:blink 1s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity:.25; } }
+  .sources { display:flex; gap:4px; margin-top:4px; }
+  .src { font-size:10.5px; border:1px solid var(--border); border-radius:3px; padding:0 5px; color:var(--muted); }
+  .src.hit { color:var(--done); border-color:var(--done); background:#eef8f2; }
+
+  .legend { display:flex; gap:16px; padding:10px 16px 0; font-size:11.5px; color:var(--muted); flex-wrap:wrap; }
+  .legend i { display:inline-block; width:10px; height:10px; margin-right:5px; vertical-align:-1px; border-radius:1px; }
+
+  .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; padding:4px 16px 12px; }
+  .metric { border:1px solid var(--border); border-radius:3px; padding:9px 12px; }
+  .metric .k { font-size:11px; font-weight:600; letter-spacing:.4px; text-transform:uppercase; color:var(--muted); }
+  .metric .v { font-size:22px; font-weight:600; line-height:1.3; }
+  .metric .c { font-size:11.5px; color:var(--muted); min-height:16px; }
+  .v.good { color:var(--done); } .v.warn { color:var(--escalated); } .v.bad { color:var(--error); }
+  #decision { margin:0 16px 16px; border:1px solid var(--border); border-left:4px solid var(--border-strong); border-radius:3px; padding:10px 14px; display:none; }
+  #decision .t { font-weight:600; } #decision .r { color:var(--muted); margin-top:2px; }
+
+  /* log */
+  #log { padding:0; }
+  .row { display:grid; grid-template-columns:54px 1fr; gap:10px; padding:7px 14px; border-bottom:1px solid #eef0f3; font-size:12.5px; }
+  .row .t { color:var(--muted); font-family:var(--mono); font-size:11.5px; padding-top:1px; }
+  .row .a { font-weight:600; }
+  .row .tag { font-size:10.5px; font-weight:600; letter-spacing:.4px; text-transform:uppercase; color:var(--muted); margin-left:6px; }
+  .row .x { color:var(--muted); overflow-wrap:anywhere; }
+  .row.run { background:#f7f9fb; } .row.run .a { color:var(--accent); }
+  .row.decision .a { color:var(--escalated); } .row.tool .a { color:#5b3a8f; }
+  code { font-family:var(--mono); font-size:11.5px; background:#eef1f5; padding:0 4px; border-radius:2px; }
+  details summary { cursor:pointer; color:var(--accent); font-size:11.5px; margin-top:2px; }
+  details pre { margin:4px 0 0; padding:8px; background:#f6f8fa; border:1px solid var(--border); border-radius:3px; max-height:200px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:11px/1.45 var(--mono); }
+  .mocktag { color:var(--escalated); }
+
+  @media (max-width:1320px) {
+    body { height:auto; } html { height:auto; }
+    main { grid-template-columns:minmax(0,1fr); }
+    .panel { min-height:420px; } #log { max-height:460px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Consultation Assistant<span>Agent orchestration console</span></div>
+  <div class="spacer"></div>
+  <div class="meta">
+    <span>Mode <span id="mode" class="pill">–</span></span>
+    <span>Knowledge base <b id="kbname">–</b></span>
+    <span>Thresholds <b id="thr">–</b></span>
+    <span id="conn" class="conn">Orchestrator</span>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>MB Enterprise Chat <button class="link" id="reset">Clear</button></h2>
+    <div class="testcase">
+      <label for="cases">Test case</label>
+      <div class="row">
+        <select id="cases"></select>
+        <button class="btn" id="runCase">Run</button>
+      </div>
+    </div>
+    <div class="body" id="chatScroll"><div id="chat"><div class="empty">Ask a question below or run a test case. Each step the agents take is shown in the flow and the activity log.</div></div></div>
+    <form class="compose" id="form">
+      <input type="text" id="input" placeholder="Ask an HR or compliance question" autocomplete="off">
+      <button class="btn primary" id="send">Send</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Agent flow</h2>
+    <div class="body">
+      <div class="legend">
+        <span><i style="background:var(--idle)"></i>Idle</span><span><i style="background:var(--working)"></i>Working</span>
+        <span><i style="background:var(--done)"></i>Completed</span><span><i style="background:var(--escalated)"></i>Escalated</span>
+        <span><i style="background:var(--skipped)"></i>Skipped</span><span><i style="background:var(--error)"></i>Error</span>
+      </div>
+      <div class="stage"><div id="flowWrap"><div id="flow"></div></div></div>
+      <div class="metrics">
+        <div class="metric"><div class="k">Confidence</div><div class="v" id="mConf">–</div><div class="c" id="mConfC"></div></div>
+        <div class="metric"><div class="k">Risk level</div><div class="v" id="mRisk">–</div><div class="c" id="mRiskC"></div></div>
+        <div class="metric"><div class="k">Answer quality</div><div class="v" id="mQual">–</div><div class="c" id="mQualC"></div></div>
+        <div class="metric"><div class="k">Routing</div><div class="v" id="mRoute">–</div><div class="c" id="mRouteC"></div></div>
+      </div>
+      <div id="decision"><div class="t"></div><div class="r"></div></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Activity log</h2>
+    <div class="body" id="logScroll"><div id="log"></div></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let cfg, meta, runStart = 0, labels = {};
+
+const POS = { mb_chat:[90,225], orchestrator:[320,225], risk:[550,75], evaluator:[550,225], servicenow:[550,375], kb:[780,75] };
+const W = 172, H = 118;
+const EDGES = [['mb_chat','orchestrator','A2A'],['orchestrator','risk','Foundry'],['risk','kb','MCP'],['orchestrator','evaluator','Foundry'],['orchestrator','servicenow','Foundry']];
+const SRC_LABEL = { sharepoint:'SharePoint', web:'Web' };
+
+function fit() {
+  const wrap = $('flowWrap'), scale = Math.min(1, (wrap.parentElement.clientWidth - 32) / 880);
+  $('flow').style.transform = `scale(${scale})`; wrap.style.height = (460 * scale) + 'px';
+}
+window.addEventListener('resize', fit);
+
+function buildFlow() {
+  const flow = $('flow'); flow.innerHTML = '';
+  const ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg');
+  svg.innerHTML = '<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#9aa5b1"/></marker></defs>';
+  flow.appendChild(svg);
+  EDGES.forEach(([a,b,label]) => {
+    const p1 = edgePoint(a,b), p2 = edgePoint(b,a);
+    const line = document.createElementNS(ns,'path');
+    line.setAttribute('d',`M${p1[0]} ${p1[1]} L${p2[0]} ${p2[1]}`); line.setAttribute('class','edge'); line.id = `e-${a}-${b}`;
+    line.setAttribute('marker-end','url(#ah)'); line.setAttribute('marker-start','url(#ah)'); svg.appendChild(line);
+    const t = document.createElementNS(ns,'text');
+    t.setAttribute('x',(p1[0]+p2[0])/2); t.setAttribute('y',(p1[1]+p2[1])/2 - 5); t.setAttribute('class','edgelabel'); t.id = `l-${a}-${b}`; t.textContent = label; svg.appendChild(t);
+  });
+  meta.agents.forEach(a => {
+    labels[a.id] = a.label;
+    const [x,y] = POS[a.id], d = document.createElement('div');
+    d.className = 'node'; d.id = `n-${a.id}`; d.dataset.state = 'idle';
+    d.style.left = (x - W/2) + 'px'; d.style.top = (y - H/2) + 'px';
+    d.innerHTML = `<div class="name">${esc(a.label)}</div><div class="role">${esc(a.role)}</div>` +
+      (a.id === 'kb' ? `<div class="sources"><span class="src" id="s-sharepoint">SharePoint</span><span class="src" id="s-web">Web</span></div>` : '') +
+      `<div class="stat"><span class="state">idle</span><span class="detail"></span></div><div class="host">${esc(a.host)}</div>`;
+    flow.appendChild(d);
+  });
+  fit();
+}
+function edgePoint(a,b) {
+  const [ax,ay] = POS[a], [bx,by] = POS[b], dx = bx-ax, dy = by-ay;
+  const s = Math.min((W/2+3)/Math.abs(dx||1e-9), (H/2+3)/Math.abs(dy||1e-9));
+  return [ax+dx*s, ay+dy*s];
+}
+function setState(agent, state, detail='') {
+  const n = $(`n-${agent}`); if (!n) return;
+  n.dataset.state = state; n.querySelector('.state').textContent = state === 'done' ? 'completed' : state;
+  const d = n.querySelector('.detail'); d.textContent = detail; d.title = detail;
+}
+function flash(a,b) {
+  const e = EDGES.find(e => (e[0]===a&&e[1]===b)||(e[0]===b&&e[1]===a)); if (!e) return;
+  const line = $(`e-${e[0]}-${e[1]}`), lab = $(`l-${e[0]}-${e[1]}`);
+  line.classList.add('active'); lab.classList.add('active');
+  setTimeout(() => { line.classList.remove('active'); lab.classList.remove('active'); }, 2200);
+}
+function resetRun() {
+  meta.agents.forEach(a => setState(a.id,'idle'));
+  Object.keys(SRC_LABEL).forEach(k => { const c = $('s-'+k); if (c) { c.className='src'; c.textContent = SRC_LABEL[k]; } });
+  ['mConf','mRisk','mQual','mRoute'].forEach(i => { $(i).textContent='–'; $(i).className='v'; });
+  ['mConfC','mRiskC','mQualC','mRouteC'].forEach(i => $(i).textContent='');
+  $('decision').style.display='none';
+}
+const name = id => (id === 'user' ? 'Requester' : labels[id]) || id;
+const rel = ts => { const s = Math.max(0, ts - runStart); return `${String(Math.floor(s/60)).padStart(2,'0')}:${(s%60).toFixed(1).padStart(4,'0')}`; };
+function log(ts, actor, text, cls='', tag='', extra='') {
+  const d = document.createElement('div'); d.className = 'row ' + cls;
+  d.innerHTML = `<div class="t">${ts ? rel(ts) : ''}</div><div><span class="a">${esc(actor)}</span>${tag?`<span class="tag">${esc(tag)}</span>`:''}${text?`<div class="x">${text}</div>`:''}${extra}</div>`;
+  $('log').appendChild(d); $('logScroll').scrollTop = $('logScroll').scrollHeight;
+}
+const tone = (v, ok, lo) => v >= ok ? 'good' : v >= lo ? 'warn' : 'bad';
+
+function onEvent(e) {
+  switch (e.kind) {
+    case 'run_start': runStart = e.ts; resetRun(); log(e.ts, 'New request', esc(e.query), 'run'); break;
+    case 'status':
+      setState(e.agent, e.state, e.detail);
+      if (e.state === 'working') log(e.ts, name(e.agent), esc(e.detail), '', 'working');
+      break;
+    case 'message':
+      flash(e.src, e.dst);
+      log(e.ts, `${name(e.src)} to ${name(e.dst)}`, esc(e.text), '', e.protocol); break;
+    case 'tool_call': {
+      const body = `${typeof e.args === 'string' ? e.args : JSON.stringify(e.args, null, 1)}\n\nResult\n${e.result ?? ''}`;
+      log(e.ts, name(e.agent), `Called <code>${esc(e.tool)}</code>${e.mock ? ' <span class="mocktag">(simulated)</span>' : ''}${e.ms ? ` · ${e.ms} ms` : ''}`, 'tool', 'tool call',
+          `<details><summary>Arguments and result</summary><pre>${esc(body)}</pre></details>`); break; }
+    case 'kb_hit': {
+      const c = $('s-'+e.source); if (c) { c.className = 'src hit'; c.textContent = `${SRC_LABEL[e.source] || e.source} · ${e.count}`; }
+      flash('risk','kb'); break; }
+    case 'scores':
+      if (e.confidence !== undefined) { $('mConf').textContent = e.confidence.toFixed(2); $('mConf').className = 'v ' + tone(e.confidence, meta.thresholds.confidence_min, 0.4); $('mConfC').textContent = `Minimum ${meta.thresholds.confidence_min.toFixed(2)}`; }
+      if (e.risk) { $('mRisk').textContent = e.risk.charAt(0) + e.risk.slice(1).toLowerCase(); $('mRisk').className = 'v ' + ({LOW:'good',MEDIUM:'warn',HIGH:'bad'}[e.risk]); $('mRiskC').textContent = 'Escalates at high'; }
+      if (e.quality !== undefined) { $('mQual').textContent = e.quality.toFixed(2); $('mQual').className = 'v ' + tone(e.quality, meta.thresholds.quality_min, 0.5); $('mQualC').textContent = `Minimum ${meta.thresholds.quality_min.toFixed(2)}`; }
+      break;
+    case 'decision': {
+      const esc_ = e.route === 'ESCALATE', why = { low_confidence:'Low confidence', high_risk:'High risk', low_quality:'Insufficient answer quality', ok:'All checks passed' }[e.trigger] || e.trigger;
+      $('mRoute').textContent = esc_ ? 'Human expert' : 'AI answer'; $('mRoute').className = 'v ' + (esc_ ? 'warn' : 'good'); $('mRouteC').textContent = why;
+      const d = $('decision'); d.style.display = 'block'; d.style.borderLeftColor = esc_ ? 'var(--escalated)' : 'var(--done)';
+      d.querySelector('.t').textContent = esc_ ? 'Escalated to a human expert through ServiceNow' : 'Answer approved and returned to the requester';
+      d.querySelector('.r').textContent = `${why}: ${e.reasons.join('; ')}`;
+      log(e.ts, 'Routing decision', esc(`${esc_ ? 'Escalate' : 'Answer'} · ${why}. ${e.reasons.join('; ')}`), 'decision'); break; }
+    case 'run_end': log(e.ts, 'Request finished', esc(e.status), 'run'); break;
+  }
+}
+
+function connect() {
+  const es = new EventSource(cfg.orchestrator_url + '/events');
+  es.onopen = () => { $('conn').className = 'conn ok'; };
+  es.onerror = () => { $('conn').className = 'conn'; };
+  es.onmessage = m => onEvent(JSON.parse(m.data));
+}
+
+function addMsg(role, text, status) {
+  const empty = document.querySelector('#chat .empty'); if (empty) empty.remove();
+  const d = document.createElement('div'); d.className = 'msg ' + role;
+  const who = role === 'user' ? 'You' : 'MB Enterprise Chat';
+  const label = { ANSWERED:'Answered', ESCALATED:'Escalated to expert', ERROR:'Error', CLARIFY:'Clarification needed' }[status];
+  d.innerHTML = `<span class="who">${who}</span>${status ? `<span class="status ${status}">${label}</span><br>` : ''}${esc(text)}`;
+  $('chat').appendChild(d); $('chatScroll').scrollTop = $('chatScroll').scrollHeight; return d;
+}
+async function send(text) {
+  if (!text.trim()) return;
+  addMsg('user', text); $('input').value = ''; $('send').disabled = $('runCase').disabled = true;
+  const wait = addMsg('bot', 'Working on your request…');
+  try {
+    const r = await fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ message: text }) });
+    const j = await r.json(); wait.remove(); addMsg('bot', j.reply, j.status);
+  } catch (err) { wait.remove(); addMsg('bot', 'The request failed: ' + err, 'ERROR'); }
+  $('send').disabled = $('runCase').disabled = false; $('input').focus();
+}
+
+(async function init() {
+  cfg = await (await fetch('/api/config')).json();
+  try { meta = await (await fetch(cfg.orchestrator_url + '/api/meta')).json(); }
+  catch (e) { $('log').innerHTML = `<div class="row"><div></div><div><span class="a">Orchestrator not reachable</span><div class="x">${esc(cfg.orchestrator_url)}. Start it with <code>python -m mbpoc.run_all</code> and reload.</div></div></div>`; return; }
+  $('mode').textContent = meta.mock ? 'Offline simulation' : 'Live · Microsoft Foundry'; $('mode').className = 'pill ' + (meta.mock ? 'mock' : 'live');
+  $('kbname').textContent = meta.knowledge_base;
+  $('thr').textContent = `confidence ≥ ${meta.thresholds.confidence_min.toFixed(2)} · quality ≥ ${meta.thresholds.quality_min.toFixed(2)}`;
+  buildFlow();
+  cfg.scenarios.forEach(s => { const o = document.createElement('option'); o.value = s.message; o.textContent = s.label; $('cases').appendChild(o); });
+  $('runCase').onclick = () => send($('cases').value);
+  $('form').onsubmit = ev => { ev.preventDefault(); send($('input').value); };
+  $('reset').onclick = () => { $('chat').innerHTML = '<div class="empty">Ask a question below or run a test case.</div>'; $('log').innerHTML = ''; resetRun(); };
+  (await (await fetch(cfg.orchestrator_url + '/events/history')).json()).forEach(onEvent);
+  connect();
+})();
+</script>
+</body>
+</html>
