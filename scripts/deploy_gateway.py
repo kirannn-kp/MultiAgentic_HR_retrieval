@@ -42,10 +42,12 @@ def build_zip() -> Path:
     out = Path(tempfile.mkdtemp()) / "gateway.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         z.write(ROOT / "requirements.txt", "requirements.txt")
-        for folder in ("src", "config"):
-            for f in (ROOT / folder).rglob("*"):
-                if f.is_file() and "__pycache__" not in f.parts and f.suffix != ".pyc":
-                    z.write(f, f.relative_to(ROOT).as_posix())
+        for f in (ROOT / "src" / "mbpoc").rglob("*"):  # package at the zip root, so `mbpoc` is importable without PYTHONPATH tricks
+            if f.is_file() and "__pycache__" not in f.parts and f.suffix != ".pyc":
+                z.write(f, f.relative_to(ROOT / "src").as_posix())
+        for f in (ROOT / "config").rglob("*"):
+            if f.is_file():
+                z.write(f, f.relative_to(ROOT).as_posix())
     return out
 
 
@@ -73,10 +75,10 @@ def main() -> None:
         "SEARCH_API_VERSION": s.search_api_version, "KNOWLEDGE_BASE_NAME": s.kb_name, "KB_CONNECTION_NAME": s.kb_connection,
         "AGENT_RISK": s.agent_risk, "AGENT_EVALUATOR": s.agent_evaluator, "AGENT_SERVICENOW": s.agent_servicenow, "AGENT_MB_CHAT": s.agent_mb_chat,
         "ORCHESTRATOR_URL": f"https://{host}", "A2A_API_KEY": key, "CORS_ORIGINS": "https://localhost",
-        "SCM_DO_BUILD_DURING_DEPLOYMENT": "true", "WEBSITES_PORT": "8000",
+        "SCM_DO_BUILD_DURING_DEPLOYMENT": "true", "WEBSITES_PORT": "8000", "MBPOC_ROOT": "/home/site/wwwroot",
     }
     az(["webapp", "config", "appsettings", "set", "-g", rg, "-n", app, "--settings", *[f"{k}={v}" for k, v in settings.items()]], json_output=False)
-    az(["webapp", "config", "set", "-g", rg, "-n", app, "--startup-file", "cd src && python -m uvicorn mbpoc.orchestrator_api:app --host 0.0.0.0 --port 8000"], json_output=False)
+    az(["webapp", "config", "set", "-g", rg, "-n", app, "--startup-file", "python -m uvicorn mbpoc.orchestrator_api:app --host 0.0.0.0 --port 8000"], json_output=False)
     principal = az(["webapp", "identity", "assign", "-g", rg, "-n", app, "--query", "principalId", "-o", "tsv"], json_output=False).strip()
     az(["role", "assignment", "create", "--assignee-object-id", principal, "--assignee-principal-type", "ServicePrincipal", "--role", "Foundry User", "--scope", account["id"]], json_output=False)
 

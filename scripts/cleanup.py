@@ -39,3 +39,14 @@ for conn in (s.kb_connection, s.search_endpoint.split("//")[1].split(".")[0]):
     r = requests.delete(f"https://management.azure.com{s.project_resource_id}/connections/{conn}?api-version=2025-10-01-preview", headers=arm, timeout=60)
     print(f"{'deleted' if r.status_code < 300 else 'skipped (' + str(r.status_code) + ')'} connection {conn}")
 print("Done. Run setup.ps1 again to recreate everything.")
+
+# optional A2A gateway (App Service) created by deploy-gateway.ps1
+rg = s.project_resource_id.split("/")[4]
+from mbpoc.infra.azcli import az  # noqa: E402
+
+for app in az(["webapp", "list", "-g", rg, "--query", "[?starts_with(name,'mb-a2a-gateway')].name", "-o", "tsv"], json_output=False, check=False).split():
+    az(["webapp", "delete", "-g", rg, "-n", app], json_output=False, check=False)
+    print(f"deleted web app {app}")
+if az(["appservice", "plan", "show", "-g", rg, "-n", "mb-a2a-plan", "--query", "name", "-o", "tsv"], json_output=False, check=False):
+    az(["appservice", "plan", "delete", "-g", rg, "-n", "mb-a2a-plan", "--yes"], json_output=False, check=False)
+    print("deleted App Service plan mb-a2a-plan")

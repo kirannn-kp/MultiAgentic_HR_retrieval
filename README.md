@@ -130,7 +130,14 @@ The demo already talks to the orchestrator the way a real chat agent would: **A2
 - Endpoint: `POST http://<gateway>/a2a` with JSON-RPC `message/send` (`params.message.parts[0].text` = the question; optional `metadata.requester`)
 - Result: an A2A task whose artifact has a text part and a data part (status, answer or ticket, scores, citations)
 
-With `ORCHESTRATOR_MODE=foundry` the gateway forwards to the Foundry hosted agent (Foundry does not offer A2A for hosted agents itself). For a chat agent on AWS the gateway must run at an address AWS can reach and must be protected with sign-in; this demo runs it on your own computer only.
+With `ORCHESTRATOR_MODE=foundry` the gateway forwards to the Foundry hosted agent (Foundry does not offer A2A for hosted agents itself).
+
+**Publish the gateway so a chat agent elsewhere (for example on AWS) can reach it** (optional, after `deploy-hosted.ps1`):
+
+```powershell
+.\deploy-gateway.ps1        # 10-15 minutes: Azure App Service (Linux B1), managed identity, API key
+```
+It prints the A2A endpoint, the agent card address and an **API key** (also saved in `.env` as `A2A_GATEWAY_KEY`). Give those two to the team that owns the chat agent; they send `Authorization: Bearer <key>`. Everything except the agent card and `/health` requires the key. The key is a simple stand-in: for production use Entra / OAuth sign-in. The App Service plan is billed per hour; `scripts/cleanup.py` removes it.
 
 ## Good to know
 
