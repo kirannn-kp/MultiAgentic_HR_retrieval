@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from pydantic import BaseModel
 from .agents import mb_chat
 from .agents.mb_chat import auth_headers
 from .config import get_settings
+from .contracts import Jurisdiction
 from .events import Tracer
 
 settings = get_settings()
@@ -33,6 +35,7 @@ SCENARIOS = [
 class ChatRequest(BaseModel):
     message: str
     requester: str = "employee@mb-enterprise.example"
+    jurisdiction: Jurisdiction | None = None
 
 
 @app.get("/health")
@@ -54,7 +57,7 @@ def agent_card() -> dict:
 @app.get("/api/config")
 def config() -> dict:
     # the browser reaches the orchestrator through this service (/orch), so only one port has to be exposed
-    return {"orchestrator_url": "/orch", "mock": settings.mock, "scenarios": SCENARIOS}
+    return {"orchestrator_url": "/orch", "mock": settings.mock, "scenarios": SCENARIOS, "regional_retrieval": settings.regional_retrieval}
 
 
 @app.get("/orch/api/meta")
@@ -93,17 +96,35 @@ async def chat(req: ChatRequest) -> dict:
 
 
 def _run(req: ChatRequest, tr: Tracer) -> dict:
+    started = time.perf_counter()
+    timings: dict[str, int] = {}
     tr.run_start(req.message, req.requester)
     tr.message("user", "mb_chat", req.message, protocol="chat")
     try:
         intake = mb_chat.intake(req.message, tr)
+        timings["intake"] = int((time.perf_counter() - started) * 1000)
         if intake.needs_clarification:
             tr.run_end("CLARIFY")
-            return {"run_id": tr.run_id, "status": "CLARIFY", "reply": intake.clarifying_question}
-        response = mb_chat.call_orchestrator(intake.normalized_query, req.requester, tr)
+            return {"run_id": tr.run_id, "status": "CLARIFY", "reply": intake.clarifying_question, "timings_ms": timings}
+        if settings.regional_retrieval and req.jurisdiction is None:
+            tr.status("mb_chat", "done", "Jurisdiction selection required")
+            tr.run_end("CLARIFY")
+            return {"run_id": tr.run_id, "status": "CLARIFY", "reply": "Please select Germany or European Union, then send the same question again.", "timings_ms": timings}
+        if req.jurisdiction is not None and not settings.regional_retrieval:
+            raise ValueError("Enable regional retrieval before supplying a jurisdiction")
+        before_call = time.perf_counter()
+        response = (
+            mb_chat.call_orchestrator(req.message, req.requester, tr, req.jurisdiction)
+            if settings.regional_retrieval else mb_chat.call_orchestrator(req.message, req.requester, tr)
+        )
+        timings["orchestrator"] = int((time.perf_counter() - before_call) * 1000)
+        tr.timing("orchestrator", "round_trip", timings["orchestrator"])
+        before_present = time.perf_counter()
         reply = mb_chat.present(response, tr)
+        timings["presentation"] = int((time.perf_counter() - before_present) * 1000)
+        timings["total"] = int((time.perf_counter() - started) * 1000)
         tr.run_end(response.status, response=response.model_dump(mode="json"), reply=reply)
-        return {"run_id": tr.run_id, "status": response.status, "reply": reply, "response": response.model_dump(mode="json")}
+        return {"run_id": tr.run_id, "status": response.status, "reply": reply, "response": response.model_dump(mode="json"), "timings_ms": timings}
     except httpx.HTTPError as exc:
         tr.status("mb_chat", "error", f"orchestrator unreachable: {exc}")
         tr.run_end("ERROR")
@@ -112,6 +133,8 @@ def _run(req: ChatRequest, tr: Tracer) -> dict:
         tr.status("mb_chat", "error", str(exc)[:200])
         tr.run_end("ERROR")
         return {"run_id": tr.run_id, "status": "ERROR", "reply": f"Error: {type(exc).__name__}: {exc}"}
+    finally:
+        tr.timing("mb_chat", "total", int((time.perf_counter() - started) * 1000))
 
 
 UI = Path(__file__).parent / "ui" / "console.html"

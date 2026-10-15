@@ -25,6 +25,23 @@ def _put(s: Settings, kind: str, name: str, body: dict) -> dict:
     return resp.json() if resp.text else {}
 
 
+def get_resource(s: Settings, kind: str, name: str) -> dict | None:
+    url = f"{s.search_endpoint.rstrip('/')}/{kind}/{name}?api-version={s.search_api_version}"
+    resp = requests.get(url, headers=_search_headers(), timeout=30)
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _ensure(s: Settings, kind: str, name: str, body: dict, *, update_existing: bool) -> dict:
+    existing = get_resource(s, kind, name)
+    if existing is not None and not update_existing:
+        print(f"  REUSED {kind}/{name} (unchanged)")
+        return existing
+    return _put(s, kind, name, body)
+
+
 def _model(s: Settings, deployment: str, model: str) -> dict:
     return {"kind": "azureOpenAI", "azureOpenAIParameters": {"resourceUri": s.aoai_endpoint, "deploymentId": deployment, "modelName": model}}
 
@@ -63,24 +80,27 @@ def erd_source(s: Settings) -> dict:
 
 
 def _index_exists(s: Settings) -> bool:
-    url = f"{s.search_endpoint.rstrip('/')}/indexes/{sp_sync.INDEX_NAME}?api-version={s.search_api_version}"
-    return requests.get(url, headers=_search_headers(), timeout=30).status_code == 200
+    return get_resource(s, "indexes", sp_sync.INDEX_NAME) is not None
 
 
-def setup_knowledge_base(s: Settings, sharepoint_url: str = "") -> list[str]:
+def setup_knowledge_base(s: Settings, sharepoint_url: str = "", *, update_existing: bool = False) -> list[str]:
+    existing = get_resource(s, "knowledgebases", s.kb_name)
+    if existing is not None and not update_existing:
+        print(f"  REUSED knowledge base '{s.kb_name}' and its sources (unchanged)")
+        return [source["name"] for source in existing.get("knowledgeSources", [])]
     sources: list[str] = []
     site_url = sharepoint_url or s.sharepoint_site_url
     native = os.environ.get("SHAREPOINT_MODE", "sync").lower() == "native"
     if native and site_url and s.sharepoint_app_id and s.sharepoint_app_secret and s.tenant_id:
-        _put(s, "knowledgesources", KS_SHAREPOINT, sharepoint_source(s, site_url)); sources.append(KS_SHAREPOINT)
+        _ensure(s, "knowledgesources", KS_SHAREPOINT, sharepoint_source(s, site_url), update_existing=update_existing); sources.append(KS_SHAREPOINT)
     elif not native and _index_exists(s):
-        _put(s, "knowledgesources", KS_SHAREPOINT, sp_sync.knowledge_source_body()); sources.append(KS_SHAREPOINT)
+        _ensure(s, "knowledgesources", KS_SHAREPOINT, sp_sync.knowledge_source_body(), update_existing=update_existing); sources.append(KS_SHAREPOINT)
     else:
         print("! SharePoint source skipped (run scripts/01_sync_sharepoint.py first, or set SHAREPOINT_MODE=native with the app settings)")
     if s.enable_web_source:
-        _put(s, "knowledgesources", KS_WEB, web_source(s)); sources.append(KS_WEB)
+        _ensure(s, "knowledgesources", KS_WEB, web_source(s), update_existing=update_existing); sources.append(KS_WEB)
     if s.storage_resource_id:
-        _put(s, "knowledgesources", KS_ERD, erd_source(s)); sources.append(KS_ERD)
+        _ensure(s, "knowledgesources", KS_ERD, erd_source(s), update_existing=update_existing); sources.append(KS_ERD)
     if not sources:
         raise SystemExit("No knowledge source configured - nothing to put into the knowledge base.")
     _put(s, "knowledgebases", s.kb_name, {
@@ -117,12 +137,36 @@ def wait_for_ingestion(s: Settings, names: list[str], timeout_s: int = 600) -> N
         print(f"  still ingesting: {pending} (check later with scripts/05_check_env.py)")
 
 
-def create_search_connection(s: Settings) -> None:
+def _reuse_connection(s: Settings, name: str, target: str, category: str, *, update_existing: bool) -> bool:
+    url = f"https://management.azure.com{s.project_resource_id}/connections/{name}?api-version=2025-10-01-preview"
+    token = _cred.get_token("https://management.azure.com/.default").token
+    resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=60)
+    if resp.status_code == 404:
+        return False
+    resp.raise_for_status()
+    if update_existing:
+        return False
+    properties = resp.json()["properties"]
+    actual = properties.get("target", "").split("?", 1)[0].rstrip("/")
+    expected = target.split("?", 1)[0].rstrip("/")
+    if actual != expected or properties.get("category") != category:
+        raise ValueError(
+            f"Connection '{name}' already exists with a different target or category. "
+            "Choose a different connection name, or explicitly use -UpdateExisting to replace its definition."
+        )
+    print(f"  REUSED connection '{name}' (unchanged)")
+    return True
+
+
+def create_search_connection(s: Settings, *, update_existing: bool = False) -> None:
     """Project connection to the Search service: this is what makes the knowledge base appear under Build > Knowledge in the Foundry portal."""
     name = s.search_endpoint.split("//")[1].split(".")[0]
+    if _reuse_connection(s, name, s.search_endpoint, "CognitiveSearch", update_existing=update_existing):
+        return
     resp = requests.get(f"https://management.azure.com{s.project_resource_id.split('/providers/')[0]}/providers/Microsoft.Search/searchServices/{name}?api-version=2023-11-01",
                         headers={"Authorization": f"Bearer {_cred.get_token('https://management.azure.com/.default').token}"}, timeout=60)
-    search_id = resp.json().get("id", "") if resp.status_code == 200 else ""
+    resp.raise_for_status()
+    search_id = resp.json()["id"]
     token = _cred.get_token("https://management.azure.com/.default").token
     resp = requests.put(
         f"https://management.azure.com{s.project_resource_id}/connections/{name}?api-version=2025-10-01-preview",
@@ -137,8 +181,10 @@ def create_search_connection(s: Settings) -> None:
     print(f"Search connection '{name}' created (knowledge base is visible in the Foundry portal under Build > Knowledge)")
 
 
-def create_mcp_connection(s: Settings) -> None:
+def create_mcp_connection(s: Settings, *, update_existing: bool = False) -> None:
     """RemoteTool connection that lets Foundry agents call the knowledge base MCP endpoint with the project's managed identity."""
+    if _reuse_connection(s, s.kb_connection, s.mcp_endpoint, "RemoteTool", update_existing=update_existing):
+        return
     token = _cred.get_token("https://management.azure.com/.default").token
     resp = requests.put(
         f"https://management.azure.com{s.project_resource_id}/connections/{s.kb_connection}?api-version=2025-10-01-preview",

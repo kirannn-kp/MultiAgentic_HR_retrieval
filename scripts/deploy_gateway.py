@@ -73,6 +73,7 @@ def main() -> None:
         "MOCK_MODE": "false", "ORCHESTRATOR_MODE": "foundry", "HOSTED_ORCHESTRATOR_AGENT": s.hosted_agent, "PROJECT_ENDPOINT": s.project_endpoint,
         "PROJECT_RESOURCE_ID": s.project_resource_id, "MODEL_DEPLOYMENT_NAME": s.model, "SEARCH_ENDPOINT": s.search_endpoint,
         "SEARCH_API_VERSION": s.search_api_version, "KNOWLEDGE_BASE_NAME": s.kb_name, "KB_CONNECTION_NAME": s.kb_connection,
+        "REGIONAL_RETRIEVAL_ENABLED": "true" if s.regional_retrieval else "false",
         "AGENT_RISK": s.agent_risk, "AGENT_EVALUATOR": s.agent_evaluator, "AGENT_SERVICENOW": s.agent_servicenow, "AGENT_MB_CHAT": s.agent_mb_chat,
         "ORCHESTRATOR_URL": f"https://{host}", "A2A_API_KEY": key, "CORS_ORIGINS": "https://localhost",
         "SCM_DO_BUILD_DURING_DEPLOYMENT": "true", "WEBSITES_PORT": "8000", "MBPOC_ROOT": "/home/site/wwwroot",

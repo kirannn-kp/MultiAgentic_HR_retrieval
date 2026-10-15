@@ -24,13 +24,15 @@ os.environ.setdefault("MOCK_MODE", "false")
 from agent_framework import Executor, Message, WorkflowBuilder, WorkflowContext, handler
 from agent_framework_foundry_hosting import ResponsesHostServer
 from dotenv import load_dotenv
+from pydantic import TypeAdapter
 from typing_extensions import Never
 
 load_dotenv()
 
 from mbpoc import policy  # noqa: E402
 from mbpoc.agents import evaluator, risk, servicenow  # noqa: E402
-from mbpoc.contracts import Decision, OrchestratorResponse, QualityResult, RiskResult  # noqa: E402
+from mbpoc.contracts import Decision, Jurisdiction, OrchestratorResponse, QualityResult, RiskResult  # noqa: E402
+from mbpoc.config import get_settings  # noqa: E402
 from mbpoc.events import Tracer  # noqa: E402
 
 Case = dict[str, Any]  # {query, requester, run_id, events, risk, quality, decision}
@@ -83,14 +85,19 @@ class Intake(Executor):
     @handler
     async def run(self, messages: list[Message], ctx: WorkflowContext[dict]) -> None:
         user_text = next((m.text for m in reversed(messages) if m.role == "user" and m.text), "")
-        requester, query = "anonymous", user_text.strip()
-        if query.startswith("{"):  # callers may send {"question": "...", "requester": "..."}
+        requester, query, jurisdiction = "anonymous", user_text, None
+        if query.lstrip().startswith("{"):  # callers may send {"question": "...", "requester": "..."}
             try:
                 data = json.loads(query)
                 query, requester = data.get("question", query), data.get("requester", requester)
+                jurisdiction = data.get("jurisdiction")
             except json.JSONDecodeError:
                 pass
-        case: Case = {"query": query, "requester": requester, "run_id": uuid.uuid4().hex[:12], "events": [], "risk": None, "quality": None, "decision": None}
+        if get_settings().regional_retrieval:
+            jurisdiction = TypeAdapter(Jurisdiction).validate_python(jurisdiction)
+        elif jurisdiction is not None:
+            raise ValueError("Regional retrieval is not enabled in this hosted deployment")
+        case: Case = {"query": query, "requester": requester, "jurisdiction": jurisdiction, "run_id": uuid.uuid4().hex[:12], "events": [], "risk": None, "quality": None, "decision": None}
         _tracer(case).status("orchestrator", "working", "Request received by hosted workflow")
         await ctx.send_message(case)
 
@@ -101,7 +108,7 @@ class RiskAssessment(Executor):
 
     @handler
     async def run(self, case: dict, ctx: WorkflowContext[dict]) -> None:
-        result = await asyncio.to_thread(risk.assess, case["query"], case["requester"], _tracer(case))
+        result = await asyncio.to_thread(risk.assess, case["query"], case["requester"], _tracer(case), case.get("jurisdiction"))
         case["risk"] = result.model_dump()
         pre = policy.pre_gate(result)  # None -> the evaluator still has to run
         case["decision"] = pre.model_dump() if pre else None

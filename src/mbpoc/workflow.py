@@ -2,16 +2,19 @@
 from __future__ import annotations
 
 from .agents import evaluator, risk as risk_agent, servicenow
-from .contracts import OrchestratorResponse
+from .config import get_settings
+from .contracts import Jurisdiction, OrchestratorResponse
 from .events import Tracer
 from . import policy
 
 
-def handle_request(query: str, requester: str, tr: Tracer) -> OrchestratorResponse:
+def handle_request(query: str, requester: str, tr: Tracer, jurisdiction: Jurisdiction | None = None) -> OrchestratorResponse:
     tr.status("orchestrator", "working", "A2A request received")
     risk = quality = None
     try:
-        risk = risk_agent.assess(query, requester, tr)
+        if jurisdiction is not None and not get_settings().regional_retrieval:
+            raise ValueError("Enable regional retrieval before supplying a jurisdiction")
+        risk = risk_agent.assess(query, requester, tr, jurisdiction) if get_settings().regional_retrieval else risk_agent.assess(query, requester, tr)
 
         decision = policy.pre_gate(risk)
         if decision is None:

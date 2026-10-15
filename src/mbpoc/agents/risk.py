@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 
 from ..config import get_settings
-from ..contracts import Citation, RiskResult
+from ..contracts import Citation, Jurisdiction, RiskResult
 from ..events import Tracer
 from . import mock_kb
 from .foundry import get_runner
@@ -13,13 +13,45 @@ from .jsonutil import clamp01, extract_json
 WEB_ONLY_MAX_CONFIDENCE = 0.7
 
 
-def assess(query: str, requester: str, tr: Tracer) -> RiskResult:
+def assess(query: str, requester: str, tr: Tracer, jurisdiction: Jurisdiction | None = None) -> RiskResult:
     s = get_settings()
     tr.status("risk", "working", "Retrieving from Foundry IQ and assessing risk")
     tr.message("orchestrator", "risk", query, protocol="Foundry Responses")
     tr.status("kb", "working", "knowledge_base_retrieve")
     try:
-        if s.mock:
+        if s.regional_retrieval:
+            if jurisdiction is None:
+                raise ValueError("Select Germany (DE) or European Union (EU) for regional retrieval")
+            from .. import regional_retrieval
+
+            if s.mock:
+                scope = regional_retrieval.mock_scope(jurisdiction, tr)
+                result = mock_kb.assess(query, tr)
+                if result.citations and (
+                    "mb-sharepoint-ks" not in scope.allowed_sources or any(citation.source != "sharepoint" for citation in result.citations)
+                ):
+                    raise ValueError("Offline regional answers require the shared sample index; other mock sources are outside this scope")
+                scope.queried_sources = ["mb-sharepoint-ks"] if result.citations else []
+                result.retrieval = scope
+                tr.retrieval_scope(scope.model_dump())
+            else:
+                evidence = regional_retrieval.retrieve(query, jurisdiction, s, tr)
+                payload = {
+                    "question": query, "requester": requester, "jurisdiction": jurisdiction,
+                    "evidence": evidence.documents,
+                    "citations": [citation.model_dump() for citation in evidence.citations],
+                }
+                result = _parse(get_runner().call_with_evidence(s.agent_risk, json.dumps(payload), tr).text)
+                allowed = {(citation.source, citation.url) for citation in evidence.citations}
+                if any((citation.source, citation.url) not in allowed for citation in result.citations):
+                    raise ValueError("Risk assessment cited evidence outside the scoped retrieval")
+                if evidence.citations and not result.citations:
+                    raise ValueError("Risk assessment did not cite the supplied evidence")
+                result.citations = evidence.citations
+                if not evidence.documents:
+                    result.confidence = 0.0
+                result.retrieval = evidence.scope
+        elif s.mock:
             result = mock_kb.assess(query, tr)
         else:
             call = get_runner().call(s.agent_risk, json.dumps({"question": query, "requester": requester}), tr, "risk")

@@ -55,6 +55,7 @@ class Settings:
     orchestrator_url: str
     mb_chat_url: str
     cors_origins: list[str]
+    regional_retrieval: bool = False
 
     @property
     def hosted_agent(self) -> str:
@@ -110,6 +111,7 @@ def get_settings() -> Settings:
         orchestrator_url=_env("ORCHESTRATOR_URL", f"http://{orch_host}:{orch_port}").rstrip("/"),
         mb_chat_url=_env("MB_CHAT_URL", f"http://{mb_host}:{mb_port}").rstrip("/"),
         cors_origins=_csv("CORS_ORIGINS") or [f"http://{mb_host}:{mb_port}"],
+        regional_retrieval=_env("REGIONAL_RETRIEVAL_ENABLED", "false").lower() in ("1", "true", "yes"),
     )
 
 

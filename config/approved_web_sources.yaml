@@ -1,0 +1,387 @@
+version: 1
+shared_sources:
+- mb-sharepoint-ks
+sources:
+- name: EUR-Lex
+  region: EU
+  description: Official EU law portal. Use for Legal Acts, Preparatory Documents,
+    International Agreements, Treaties, EU Case Law, EFTA Documents, EUR-Lex Summaries,
+    National Transposition, National case-law and JURE case-law.
+  url: https://eur-lex.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: ESMA
+  region: EU
+  description: European Securities and Markets Authority. Use for the ESMA Prospectus
+    Register, Q&A, guidance, reports, prospectus materials, commentary, decisions,
+    press releases and Markets in Crypto-Assets (MiCA) sources.
+  url: https://www.esma.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: Council of the EU
+  region: EU
+  description: Council of the European Union source. Use for the Register of Council
+    Documents, treaties and agreements, European Council conclusions and EU restrictive-measures
+    material.
+  url: https://www.consilium.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: EUIPO
+  region: EU
+  description: European Union Intellectual Property Office. Use for EUIPO guidelines,
+    trade mark decisions, design decisions and related EUIPO case-law material.
+  url: https://www.euipo.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: European Commission
+  region: EU
+  description: European Commission source. Use for Commission documents and EU policy
+    and legislative material not covered by a more specific Commission portal.
+  url: https://commission.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: EU Competition Policy
+  region: EU
+  description: European Commission competition-policy source. Use for State Aid, Mergers,
+    Antitrust and Cartel, Foreign Subsidies, Competition Policy Briefs and Annual
+    Reports on Competition Policy.
+  url: https://competition-policy.ec.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: European Parliament
+  region: EU
+  description: European Parliament source. Use for Parliamentary Questions and other
+    official European Parliament material.
+  url: https://www.europarl.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: OEIL Legislative Observatory
+  region: EU
+  description: European Parliament Legislative Observatory. Use for EU legislative
+    procedures and procedure tracking.
+  url: https://oeil.secure.europarl.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: CURIA
+  region: EU
+  description: Court of Justice of the European Union source. Use for CURIA case-law,
+    CJEU Competition Digest and CJEU Fundamental Rights Digest material.
+  url: https://curia.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: European Patent Office
+  region: EU
+  description: European Patent Office source. Use for Boards of Appeal decisions,
+    Case Law of the Boards of Appeal, EPO Guidelines, the European Patent Convention
+    and EPO Official Journal material.
+  url: https://www.epo.org/
+  include_subpages: true
+  enabled: true
+- name: HUDOC
+  region: EU
+  description: European Court of Human Rights case-law database. Use for judgments,
+    decisions and other ECHR case-law material.
+  url: https://hudoc.echr.coe.int/
+  include_subpages: true
+  enabled: true
+- name: Unified Patent Court
+  region: EU
+  description: Unified Patent Court source. Use for EUPC cases, decisions and orders.
+  url: https://www.unifiedpatentcourt.org/
+  include_subpages: true
+  enabled: true
+- name: EFTA
+  region: EU
+  description: European Free Trade Association source. Use for EFTA public documents
+    and related EFTA information.
+  url: https://www.efta.int/
+  include_subpages: true
+  enabled: true
+- name: EFTA Court
+  region: EU
+  description: EFTA Court source. Use for EFTA Court cases and judicial material.
+  url: https://eftacourt.int/
+  include_subpages: true
+  enabled: true
+- name: European Banking Authority
+  region: EU
+  description: European Banking Authority source. Use for EBA Q&As, reports, consultation
+    papers, final products, opinions, guidelines, standards, decisions, annual reports,
+    calls for advice, discussion papers, recommendations, methodology, staff papers,
+    publications, warnings, responses and related material.
+  url: https://www.eba.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: EIOPA
+  region: EU
+  description: European Insurance and Occupational Pensions Authority. Use for EIOPA
+    Q&A, guidelines, reports and research, corporate documents, opinions, technical
+    standards, supervisory statements, protocols, decisions, memoranda, letters and
+    public-access documents.
+  url: https://www.eiopa.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: European Systemic Risk Board
+  region: EU
+  description: European Systemic Risk Board source. Use for recommendations, responses
+    and letters, stress testing, opinions, policy framework, COVID-19 policy measures,
+    surveys and warnings.
+  url: https://www.esrb.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: European Data Protection Supervisor
+  region: EU
+  description: European Data Protection Supervisor source. Use for prior consultations,
+    opinions, press releases, supervisory opinions, guidelines, annual reports and
+    investigations.
+  url: https://www.edps.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: European Data Protection Board
+  region: EU
+  description: European Data Protection Board source. Use for EDPB guidelines, opinions,
+    decisions, statements and other European data-protection guidance.
+  url: https://www.edpb.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: European Central Bank
+  region: EU
+  description: European Central Bank source. Use for ECB legal acts and general ECB
+    legal and institutional material.
+  url: https://www.ecb.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: ECB Banking Supervision
+  region: EU
+  description: ECB banking-supervision source. Use for Letters to Banks, SREP documents,
+    supervisory guides, supervisory priorities, thematic reports and compliance with
+    EBA Guidelines.
+  url: https://www.bankingsupervision.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: ACER
+  region: EU
+  description: EU Agency for the Cooperation of Energy Regulators. Use for ACER official
+    documents and REMIT-related regulatory material.
+  url: https://www.acer.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: ENTSO-E
+  region: EU
+  description: European Network of Transmission System Operators for Electricity.
+    Use for ERAA, Capacity Calculation Regions deliverables, Network Codes development,
+    implementation guidance and Emergency and Restoration implementation material.
+  url: https://www.entsoe.eu/
+  include_subpages: true
+  enabled: true
+- name: Europol
+  region: EU
+  description: European Union Agency for Law Enforcement Cooperation. Use for Europol
+    Newsroom and Europol Publications material.
+  url: https://www.europol.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: European Public Prosecutor's Office
+  region: EU
+  description: European Public Prosecutor's Office. Use for EPPO news and official
+    EPPO documents.
+  url: https://www.eppo.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: European Migration Network
+  region: EU
+  description: European Migration Network source. Use for the EMN Glossary, studies,
+    country factsheets, ad-hoc queries, Annual Reports on Migration and Asylum, Informs,
+    flash reports and status reports.
+  url: https://home-affairs.ec.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: CEER
+  region: EU
+  description: Council of European Energy Regulators source. Use for CEER market monitoring,
+    national reports, reports and policy papers.
+  url: https://www.ceer.eu/
+  include_subpages: true
+  enabled: true
+- name: EU Taxation and Customs
+  region: EU
+  description: European Commission taxation and customs source. Use for Binding Tariff
+    Information and administrative guidance on BTI.
+  url: https://taxation-customs.ec.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: Digital Markets Act
+  region: EU
+  description: European Commission Digital Markets Act source. Use for DMA decisions,
+    legislation and related regulatory material.
+  url: https://digital-markets-act.ec.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: European Commission Health
+  region: EU
+  description: European Commission health-policy source. Use for material concerning
+    the reform of EU pharmaceutical legislation.
+  url: https://health.ec.europa.eu/
+  include_subpages: true
+  enabled: true
+- name: NRW Justiz
+  region: DE
+  description: Official justice portal of North Rhine-Westphalia. Use for Rechtsprechung
+    NRW and NRW court-decision material.
+  url: https://www.justiz.nrw.de/
+  include_subpages: true
+  enabled: true
+- name: NRW Landesrecht
+  region: DE
+  description: Official North Rhine-Westphalia legal portal. Use for NRW Landesrecht
+    and state legislation.
+  url: https://recht.nrw.de/
+  include_subpages: true
+  enabled: true
+- name: Rechtsprechung im Internet
+  region: DE
+  description: German federal case-law portal. Use for published decisions of federal
+    courts available through Rechtsprechung im Internet.
+  url: https://www.rechtsprechung-im-internet.de/
+  include_subpages: true
+  enabled: true
+- name: Bundesgesetzblatt
+  region: DE
+  description: Official German Federal Law Gazette source. Use for Bundesgesetzblatt
+    and Bundesgesetzblatt Online-Archiv material.
+  url: https://www.recht.bund.de/
+  include_subpages: true
+  enabled: true
+- name: Bundessozialgericht
+  region: DE
+  description: German Federal Social Court source. Use for Sozialgerichtsbarkeit and
+    decisions of the Bundessozialgericht.
+  url: https://www.bsg.bund.de/
+  include_subpages: true
+  enabled: true
+- name: Bundesgerichtshof
+  region: DE
+  description: German Federal Court of Justice source. Use for decisions and official
+    judicial material from the Bundesgerichtshof.
+  url: https://www.bundesgerichtshof.de/
+  include_subpages: true
+  enabled: true
+- name: Bundespatentgericht
+  region: DE
+  description: German Federal Patent Court source. Use for decisions and official
+    material from the Bundespatentgericht.
+  url: https://www.bundespatentgericht.de/
+  include_subpages: true
+  enabled: true
+- name: Bundesverwaltungsgericht
+  region: DE
+  description: German Federal Administrative Court source. Use for decisions and official
+    judicial material from the Bundesverwaltungsgericht.
+  url: https://www.bverwg.de/
+  include_subpages: true
+  enabled: true
+- name: Bundesverfassungsgericht
+  region: DE
+  description: German Federal Constitutional Court source. Use for decisions and official
+    judicial material from the Bundesverfassungsgericht.
+  url: https://www.bundesverfassungsgericht.de/
+  include_subpages: true
+  enabled: true
+- name: Bundesfinanzhof
+  region: DE
+  description: German Federal Fiscal Court source. Use for decisions and official
+    judicial material from the Bundesfinanzhof.
+  url: https://www.bundesfinanzhof.de/
+  include_subpages: true
+  enabled: true
+- name: Bundesarbeitsgericht
+  region: DE
+  description: German Federal Labour Court source. Use for decisions and official
+    judicial material from the Bundesarbeitsgericht.
+  url: https://www.bundesarbeitsgericht.de/
+  include_subpages: true
+  enabled: true
+- name: Gesetze Bayern
+  region: DE
+  description: Bavarian legal information portal. Use for Bavarian court decisions
+    and Bavarian legal provisions in the BYGER and BYVOR source categories.
+  url: https://www.gesetze-bayern.de/
+  include_subpages: true
+  enabled: true
+- name: Brandenburg Gerichtsentscheidungen
+  region: DE
+  description: Brandenburg court-decision source. Use for published case law from
+    Brandenburg courts.
+  url: https://gerichtsentscheidungen.brandenburg.de/
+  include_subpages: true
+  enabled: true
+- name: BRAVORS
+  region: DE
+  description: Brandenburg legal-information system. Use for Brandenburg state legislation
+    and regulations.
+  url: https://bravors.brandenburg.de/
+  include_subpages: true
+  enabled: true
+- name: Bundestag DIP
+  region: DE
+  description: Documentation and Information System for Parliamentary Material. Use
+    for Bundestag parliamentary proceedings and DIP documents.
+  url: https://dip.bundestag.de/
+  include_subpages: true
+  enabled: true
+- name: Deutscher Bundestag
+  region: DE
+  description: Official German Bundestag source. Use for Plenarprotokolle and other
+    official parliamentary documentation.
+  url: https://www.bundestag.de/
+  include_subpages: true
+  enabled: true
+- name: Bundesamt für Justiz
+  region: DE
+  description: German Federal Office of Justice source. Use for BfJ publications,
+    registers and official legal information.
+  url: https://www.bundesjustizamt.de/
+  include_subpages: true
+  enabled: true
+- name: IPRspr
+  region: DE
+  description: Source for German case law concerning international private law, corresponding
+    to the Internationales Privatrecht Rechtsprechung source.
+  url: https://www.iprspr.de/
+  include_subpages: true
+  enabled: true
+- name: Bundesnetzagentur
+  region: DE
+  description: German Federal Network Agency source. Use for Beschlusskammer 4, 6,
+    7, 8 and 9 as well as Große Beschlusskammer Energie decisions and regulatory material.
+  url: https://www.bundesnetzagentur.de/
+  include_subpages: true
+  enabled: true
+- name: Bundeskartellamt
+  region: DE
+  description: German Federal Cartel Office source. Use for Bundeskartellamt decisions,
+    case reports and competition-law material.
+  url: https://www.bundeskartellamt.de/
+  include_subpages: true
+  enabled: true
+- name: REVOSax
+  region: DE
+  description: Saxony legal-information portal. Use for Saxon legal provisions in
+    the SNVOR source.
+  url: https://www.revosax.sachsen.de/
+  include_subpages: true
+  enabled: true
+- name: Bundesfinanzministerium
+  region: DE
+  description: German Federal Ministry of Finance source. Use for BMF-Schreiben and
+    other official Federal Ministry of Finance publications.
+  url: https://www.bundesfinanzministerium.de/
+  include_subpages: true
+  enabled: true
+- name: BaFin
+  region: DE
+  description: German Federal Financial Supervisory Authority source. Use for BaFin
+    Rundschreiben and other official financial-supervisory material.
+  url: https://www.bafin.de/
+  include_subpages: true
+  enabled: true

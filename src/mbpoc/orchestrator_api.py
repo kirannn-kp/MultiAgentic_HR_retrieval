@@ -10,10 +10,12 @@ import uuid
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import TypeAdapter, ValidationError
 
 from .agents import hosted, servicenow
 from .config import get_settings, load_criteria, thresholds
-from .contracts import OrchestratorResponse
+from .contracts import Jurisdiction, OrchestratorResponse
+from .regional import REGIONS, load_catalog
 from .events import AGENTS, EventHub, Tracer
 from .workflow import handle_request
 
@@ -64,6 +66,11 @@ def meta() -> dict:
     return {
         "mock": settings.mock, "agents": AGENTS, "thresholds": {"confidence_min": c_min, "quality_min": q_min},
         "criteria": load_criteria()["criteria"], "model": settings.model, "knowledge_base": settings.kb_name,
+        "regional_retrieval": settings.regional_retrieval,
+        "jurisdictions": [
+            {"value": region, "label": label, "approved_urls": len(load_catalog().group(region))}
+            for region, label in REGIONS.items()
+        ] if settings.regional_retrieval else [],
     }
 
 
@@ -110,20 +117,37 @@ async def a2a(request: Request) -> dict:
         return {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": -32601, "message": "Method not found"}}
     message = rpc.get("params", {}).get("message", {})
     meta_ = message.get("metadata", {})
-    query = " ".join(p.get("text", "") for p in message.get("parts", []) if p.get("kind") == "text").strip()
-    if not query:
+    query = " ".join(p.get("text", "") for p in message.get("parts", []) if p.get("kind") == "text")
+    if not query.strip():
         return {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": -32602, "message": "Empty message"}}
     run_id = meta_.get("run_id") or uuid.uuid4().hex[:12]
     tr = Tracer(run_id, hub.publish)
     requester = meta_.get("requester", "anonymous")
+    jurisdiction = None
+    if settings.regional_retrieval:
+        try:
+            jurisdiction = TypeAdapter(Jurisdiction).validate_python(meta_.get("jurisdiction"))
+        except ValidationError:
+            tr.status("orchestrator", "error", "Select jurisdiction DE or EU")
+            return {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": -32602, "message": "Regional retrieval requires metadata.jurisdiction = DE or EU"}}
+    elif meta_.get("jurisdiction") is not None:
+        return {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": -32602, "message": "Enable regional retrieval before supplying a jurisdiction"}}
     if os.environ.get("ORCHESTRATOR_MODE", "local").lower() == "foundry":
         # A2A front door in front of the Foundry HOSTED orchestrator (Foundry cannot expose hosted agents over A2A itself)
         try:
-            response = await asyncio.to_thread(hosted.call, query, requester, lambda ev: tr._publish({**ev, "run_id": run_id}), 0.35)
+            tr.status("orchestrator", "working", "Waiting for Foundry workflow; stage trace is available after completion")
+            callback = lambda ev: tr._publish({**ev, "run_id": run_id})
+            response = (
+                await asyncio.to_thread(hosted.call, query, requester, callback, jurisdiction)
+                if settings.regional_retrieval else await asyncio.to_thread(hosted.call, query, requester, callback)
+            )
         except Exception as exc:
             response = OrchestratorResponse(run_id=run_id, status="ERROR", error=f"{type(exc).__name__}: {exc}")
     else:
-        response = await asyncio.to_thread(handle_request, query, requester, tr)
+        response = (
+            await asyncio.to_thread(handle_request, query, requester, tr, jurisdiction)
+            if settings.regional_retrieval else await asyncio.to_thread(handle_request, query, requester, tr)
+        )
     text = response.answer if response.status == "ANSWERED" else (response.incident.message if response.incident else response.error)
     return {
         "jsonrpc": "2.0",

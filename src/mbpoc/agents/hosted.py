@@ -6,7 +6,7 @@ import threading
 from typing import Callable, Optional
 
 from ..config import get_settings
-from ..contracts import OrchestratorResponse
+from ..contracts import Jurisdiction, OrchestratorResponse
 from .jsonutil import extract_json
 
 _client = None
@@ -26,16 +26,17 @@ def _openai_client():
         return _client
 
 
-def call(query: str, requester: str, on_event: Optional[Callable[[dict], None]] = None, delay: float = 0.0) -> OrchestratorResponse:
+def call(query: str, requester: str, on_event: Optional[Callable[[dict], None]] = None, jurisdiction: Jurisdiction | None = None) -> OrchestratorResponse:
     """Hosted agents are reachable only through their Foundry endpoint (Responses). The reply starts with a readable summary
-    followed by a ```json block with the structured result; its `trace` is handed to `on_event` (optionally paced by `delay`)."""
-    import time
-
-    resp = _openai_client().responses.create(input=json.dumps({"question": query, "requester": requester}))
+    followed by a ```json block with the structured result; its completed `trace` is handed to `on_event` without delays."""
+    payload = {"question": query, "requester": requester}
+    if jurisdiction is not None:
+        payload["jurisdiction"] = jurisdiction
+    resp = _openai_client().responses.create(input=json.dumps(payload))
     result = OrchestratorResponse(**extract_json(resp.output_text.split("```json", 1)[-1]))
+    if jurisdiction is not None and result.status != "ERROR" and (not result.risk or not result.risk.retrieval or result.risk.retrieval.jurisdiction != jurisdiction):
+        raise ValueError("Hosted deployment did not return scoped retrieval. Configure and redeploy the updated regional orchestrator before using it.")
     if on_event:
         for ev in result.trace:
-            if delay:
-                time.sleep(delay)
-            on_event({k: v for k, v in ev.items() if k not in ("id", "ts", "run_id")})
+            on_event({k: v for k, v in ev.items() if k not in ("id", "run_id")})
     return result

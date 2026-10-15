@@ -1,19 +1,15 @@
 """MB Enterprise Chat (mock of the AWS-hosted agent): intake, A2A call to the orchestrator, presentation."""
 from __future__ import annotations
 
-import json
 import os
 import uuid
-from typing import Any, Callable
+from typing import Callable
 
 import httpx
 
 from ..config import get_settings
-from ..contracts import Intake, OrchestratorResponse
+from ..contracts import Intake, Jurisdiction, OrchestratorResponse
 from ..events import Tracer
-from . import mock_kb
-from .foundry import get_runner
-from .jsonutil import extract_json
 
 VAGUE = {"help", "hi", "hello", "policy", "question", "?"}
 
@@ -35,26 +31,20 @@ def http_publisher(orchestrator_url: str) -> Callable[[dict], None]:
 
 
 def intake(message: str, tr: Tracer) -> Intake:
-    s = get_settings()
-    tr.status("mb_chat", "working", "Intake")
-    if s.mock:
-        mock_kb.latency()
-        words = message.strip().rstrip("?!. ").lower().split()
-        vague = len(words) < 3 or message.strip().lower() in VAGUE
-        result = Intake(
-            needs_clarification=vague,
-            clarifying_question="Could you give me a bit more detail, e.g. which policy or situation you are asking about?" if vague else "",
-            normalized_query=message.strip(),
-        )
-    else:
-        result = Intake(**{k: v for k, v in extract_json(get_runner().call(s.agent_mb_chat, f"INTAKE: {message}", tr, "mb_chat").text).items() if k in Intake.model_fields})
-        result.normalized_query = result.normalized_query or message.strip()
+    tr.status("mb_chat", "working", "Checking request (no model call)")
+    text = message.strip().rstrip("?!. ").lower()
+    vague = not text or text in VAGUE or text in {"i have a question", "can you help", "help me"}
+    result = Intake(
+        needs_clarification=vague,
+        clarifying_question="Could you give me a bit more detail, e.g. which policy or situation you are asking about?" if vague else "",
+        normalized_query=message,
+    )
     if result.needs_clarification:
         tr.status("mb_chat", "done", "Asking a clarifying question")
     return result
 
 
-def call_orchestrator(query: str, requester: str, tr: Tracer) -> OrchestratorResponse:
+def call_orchestrator(query: str, requester: str, tr: Tracer, jurisdiction: Jurisdiction | None = None) -> OrchestratorResponse:
     """A2A (JSON-RPC 2.0 message/send) call to the orchestrator's A2A endpoint. In production the real MB Enterprise Chat on AWS
     makes this same call; the endpoint runs the workflow locally or forwards to the Foundry hosted agent (ORCHESTRATOR_MODE)."""
     s = get_settings()
@@ -70,6 +60,8 @@ def call_orchestrator(query: str, requester: str, tr: Tracer) -> OrchestratorRes
             "metadata": {"requester": requester, "run_id": tr.run_id},
         }},
     }
+    if jurisdiction is not None:
+        body["params"]["message"]["metadata"]["jurisdiction"] = jurisdiction
     resp = httpx.post(f"{s.orchestrator_url}/a2a", json=body, headers=auth_headers(), timeout=180.0)
     resp.raise_for_status()
     rpc = resp.json()
@@ -78,34 +70,29 @@ def call_orchestrator(query: str, requester: str, tr: Tracer) -> OrchestratorRes
     for artifact in rpc["result"].get("artifacts", []):
         for part in artifact.get("parts", []):
             if part.get("kind") == "data":
-                return OrchestratorResponse(**part["data"])
+                result = OrchestratorResponse(**part["data"])
+                if jurisdiction is not None and result.status != "ERROR" and (
+                    not result.risk or not result.risk.retrieval or result.risk.retrieval.jurisdiction != jurisdiction
+                ):
+                    raise ValueError("Orchestrator did not return scoped retrieval for the requested jurisdiction; update its regional configuration/code first")
+                return result
     raise RuntimeError("A2A response did not contain a data part")
 
 
 def present(response: OrchestratorResponse, tr: Tracer) -> str:
-    s = get_settings()
     tr.message("orchestrator", "mb_chat", response.status, protocol="A2A result")
-    tr.status("mb_chat", "working", "Composing reply")
+    tr.status("mb_chat", "working", "Formatting reply (no model call)")
     if response.status == "ERROR":
         reply = f"Sorry, something went wrong while processing your request ({response.error})."
-    elif s.mock:
-        mock_kb.latency()
-        reply = _template(response)
     else:
-        payload: dict[str, Any] = {
-            "status": response.status, "answer": response.answer,
-            "incident_id": response.incident.incident_id if response.incident else None,
-            "reason": response.decision.reasons if response.decision else None,
-            "citations": [c.model_dump() for c in response.risk.citations] if response.risk else [],
-        }
-        reply = get_runner().call(s.agent_mb_chat, f"PRESENT: {json.dumps(payload)}", tr, "mb_chat").text
+        reply = _template(response)
     tr.status("mb_chat", "done", "Reply delivered")
     return reply
 
 
 def _template(r: OrchestratorResponse) -> str:
     if r.status == "ANSWERED":
-        cites = "\n".join(f"- {c.title} ({c.source})" for c in (r.risk.citations if r.risk else []))
+        cites = "\n".join(f"- {c.title} ({c.source})" + (f": {c.url}" if c.url else "") for c in (r.risk.citations if r.risk else []))
         return f"{r.answer}\n\nSources:\n{cites}\n\nWas this helpful?"
     why = {
         "low_confidence": "I could not find enough reliable information to answer this confidently.",
@@ -113,4 +100,8 @@ def _template(r: OrchestratorResponse) -> str:
         "low_quality": "I was not able to produce an answer of sufficient quality.",
     }.get(r.decision.trigger if r.decision else "", "This needs a human expert.")
     inc = r.incident
+    if inc is None:
+        raise ValueError("Escalated response is missing an incident acknowledgement")
+    if inc.mock:
+        return f"{why} POC acknowledgement: {inc.incident_id} ({inc.assignment_group}). No real ServiceNow incident was created or sent."
     return f"{why} I have forwarded your request to a human expert ({inc.assignment_group}). Your ticket is {inc.incident_id}; you will be contacted directly."

@@ -33,6 +33,21 @@ def azd(*args: str, cwd: Path = HOSTED, check: bool = True, capture: bool = Fals
     return res
 
 
+def ensure_role(principal_id: str, role: str, scope: str) -> None:
+    existing = az([
+        "role", "assignment", "list", "--assignee-object-id", principal_id,
+        "--scope", scope, "--query", f"[?roleDefinitionName=='{role}'].id",
+    ])
+    if existing:
+        print(f"  REUSED {role} ({scope.rsplit('/', 1)[-1]})")
+        return
+    az([
+        "role", "assignment", "create", "--assignee-object-id", principal_id,
+        "--assignee-principal-type", "ServicePrincipal", "--role", role, "--scope", scope,
+    ])
+    print(f"  GRANTED {role} ({scope.rsplit('/', 1)[-1]})")
+
+
 def main() -> None:
     s = get_settings()
     if s.mock or not s.project_endpoint:
@@ -56,6 +71,7 @@ def main() -> None:
         "__PROJECT_ENDPOINT__": s.project_endpoint, "__SEARCH_ENDPOINT__": s.search_endpoint, "__SEARCH_API_VERSION__": s.search_api_version,
         "__KB_NAME__": s.kb_name, "__KB_CONNECTION__": s.kb_connection, "__MODEL__": s.model, "__AGENT_RISK__": s.agent_risk,
         "__AGENT_EVALUATOR__": s.agent_evaluator, "__AGENT_SERVICENOW__": s.agent_servicenow, "__AGENT_MB_CHAT__": s.agent_mb_chat,
+        "__REGIONAL_RETRIEVAL__": "true" if s.regional_retrieval else "false",
     }.items():
         template = template.replace(key, val)
     (HOSTED / "azure.yaml").write_text(template, encoding="utf-8")
@@ -75,11 +91,23 @@ def main() -> None:
     for k, v in values.items():
         azd("env", "set", k, v, capture=True)
 
-    print("[3/4] Deploying to Foundry (about 2 minutes) ...")
+    print("[3/5] Deploying to Foundry (about 2 minutes) ...")
     azd("deploy", "--no-prompt")
 
-    print("[4/4] Verifying")
+    print("[4/5] Configuring hosted identity access")
     info = json.loads(azd("ai", "agent", "show", "risk-orchestrator", "--output", "json", capture=True).stdout)
+    if s.regional_retrieval:
+        principal_id = info.get("instance_identity", {}).get("principal_id")
+        if not principal_id:
+            raise ValueError("The hosted agent did not return an instance identity; regional Search permissions were not assigned")
+        search_name = s.search_endpoint.split("//", 1)[-1].split(".", 1)[0]
+        search_scope = az(["search", "service", "show", "-g", rg, "-n", search_name, "--query", "id"], json_output=False)
+        ensure_role(principal_id, "Search Service Contributor", search_scope)
+        ensure_role(principal_id, "Search Index Data Reader", search_scope)
+        ensure_role(principal_id, "Foundry User", s.project_resource_id)
+        print("  Azure RBAC can take several minutes to propagate before the first live invocation.")
+
+    print("[5/5] Verifying")
     print(f"  Agent risk-orchestrator version {info.get('version')} is {info.get('status')}")
     print(f"  Open in Foundry: {info.get('playground_url', '(see Build > Agents in the Foundry portal)')}")
     env_text = (ROOT / ".env").read_text(encoding="utf-8").splitlines()

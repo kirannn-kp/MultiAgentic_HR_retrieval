@@ -1,0 +1,1 @@
+Generate HR and compliance consultation cases that test DE and EU jurisdiction-scoped retrieval, confidence and risk gating, evaluation quality, unchanged question handling, and ServiceNow acknowledgement-only escalation.

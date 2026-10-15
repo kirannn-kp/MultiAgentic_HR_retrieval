@@ -1,6 +1,6 @@
 """Guided one-time setup. Run through setup.ps1 (Windows) or:  python scripts/setup.py
 
-What it does (each step is safe to repeat):
+What it does (existing agents, connections, knowledge and documents are reused unchanged):
   1. finds your Foundry project, Azure AI Search service and model deployment, and writes the .env file
   2. enables sign-in (Entra) on the Search service and grants the access rights the agents need
   3. loads the sample HR / compliance documents into the Search index ("SharePoint" source)
@@ -11,9 +11,11 @@ What it does (each step is safe to repeat):
 from __future__ import annotations
 
 import os
+import argparse
 import re
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -54,7 +56,7 @@ def write_env(values: dict[str, str]) -> None:
     template = (ROOT / ".env.example").read_text(encoding="utf-8")
     out, seen = [], set()
     for line in template.splitlines():
-        m = re.match(r"^([A-Z_]+)=", line)
+        m = re.match(r"^([A-Z][A-Z0-9_]*)=", line)
         if m and m.group(1) in values:
             out.append(f"{m.group(1)}={values[m.group(1)]}")
             seen.add(m.group(1))
@@ -161,7 +163,7 @@ def configure_access(ids: dict[str, str], values: dict[str, str]) -> None:
 
 
 # ----------------------------------------------------------------------------------------------- 3-5
-def load_content_and_agents() -> None:
+def load_content_and_agents(*, update_existing: bool = False) -> None:
     from dotenv import load_dotenv
 
     load_dotenv(ENV_FILE, override=True)
@@ -171,33 +173,76 @@ def load_content_and_agents() -> None:
     s = get_settings()
     from mbpoc.infra import foundry_agents, search_admin, sp_sync
 
-    step(3, "Loading the sample HR / compliance documents")
-    deadline = time.time() + 360
-    while True:
-        try:
-            sp_sync.sync(s, "local")
-            break
-        except Exception as exc:
-            if ("403" in str(exc) or "401" in str(exc)) and time.time() < deadline:
-                say("  Waiting for the new access rights to take effect (this can take a few minutes) ...")
-                time.sleep(30)
-                continue
-            raise
+    step(3, "Checking the knowledge base and sample index")
+    existing_kb = search_admin.get_resource(s, "knowledgebases", s.kb_name)
+    if existing_kb is not None:
+        say("  Existing knowledge base found; sample documents will not be loaded.")
+    elif search_admin._index_exists(s):
+        say("  REUSED existing document index; its schema and documents are unchanged.")
+    else:
+        deadline = time.time() + 360
+        while True:
+            try:
+                sp_sync.sync(s, "local")
+                break
+            except Exception as exc:
+                if ("403" in str(exc) or "401" in str(exc)) and time.time() < deadline:
+                    say("  Waiting for the new access rights to take effect (this can take a few minutes) ...")
+                    time.sleep(30)
+                    continue
+                raise
 
-    step(4, "Creating the Foundry IQ knowledge base (SharePoint + Web)")
-    sources = search_admin.setup_knowledge_base(s)
+    step(4, "Ensuring the Foundry IQ knowledge base and connections")
+    sources = search_admin.setup_knowledge_base(s, update_existing=update_existing)
     say(f"  Knowledge base '{s.kb_name}' with sources: {', '.join(sources)}")
-    search_admin.create_mcp_connection(s)
-    try:
-        search_admin.create_search_connection(s)
-    except Exception as exc:
-        say(f"  ! Portal connection skipped ({str(exc)[:120]}); the agents still work.")
+    search_admin.create_mcp_connection(s, update_existing=update_existing)
+    search_admin.create_search_connection(s, update_existing=update_existing)
 
-    step(5, "Creating the Foundry agents")
-    foundry_agents.create_agents(s)
+    step(5, "Ensuring the Foundry agents")
+    foundry_agents.create_agents(s, update_existing=update_existing)
+
+
+def switch_knowledge_base(name: str, connection: str | None = None) -> None:
+    from dotenv import load_dotenv
+    from mbpoc.config import get_settings
+    from mbpoc.infra import foundry_agents, search_admin
+
+    load_dotenv(ENV_FILE, override=True)
+    get_settings.cache_clear()
+    current = get_settings()
+    if not current.project_endpoint or not current.project_resource_id or not current.search_endpoint:
+        raise ValueError("Run setup.ps1 first so the Foundry project and Search endpoint are configured.")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
+        raise ValueError("Knowledge-base name must contain lowercase letters, digits and hyphens.")
+    connection = connection or (current.kb_connection if name == current.kb_name else f"kb-{name}-mcp")
+    selected = replace(current, kb_name=name, kb_connection=connection)
+    if search_admin.get_resource(selected, "knowledgebases", name) is None:
+        raise ValueError(f"Knowledge base '{name}' was not found on {selected.search_endpoint}. Nothing was switched.")
+    search_admin.create_mcp_connection(selected)
+    foundry_agents.switch_knowledge_base(selected)
+    values = read_env()
+    values.update({"KNOWLEDGE_BASE_NAME": name, "KB_CONNECTION_NAME": connection})
+    write_env(values)
+    say(f"\nSelected knowledge base '{name}'. Its sources and content were not modified.")
+    say("Restart the demo. If using the hosted orchestrator, run .\\deploy-hosted.ps1 to refresh its settings, then restart.")
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--yes", action="store_true", help="Use discovery defaults without prompts")
+    parser.add_argument("--update-existing", action="store_true", help="Explicitly replace agent, connection and knowledge definitions with repository settings")
+    parser.add_argument("--knowledge-base", help="Switch the risk agent to an existing knowledge base on the configured Search service")
+    parser.add_argument("--kb-connection", help="Existing or new MCP connection name for --knowledge-base")
+    args = parser.parse_args()
+    if args.kb_connection and not args.knowledge_base:
+        parser.error("--kb-connection requires --knowledge-base")
+    if args.knowledge_base and args.update_existing:
+        parser.error("Switch knowledge bases separately from --update-existing to preserve customer definitions")
+    if args.knowledge_base:
+        switch_knowledge_base(args.knowledge_base, args.kb_connection)
+        return
+    if args.update_existing:
+        say("UPDATE requested: repository definitions will replace existing agents, connections, knowledge base and sources. Documents are not reloaded.")
     say("MB Enterprise consultation assistant - guided setup")
     say("=" * 55)
     step(1, "Finding your Azure resources")
@@ -206,11 +251,11 @@ def main() -> None:
     values = read_env()
     step(2, "Setting up access rights")
     configure_access(ids, values)
-    load_content_and_agents()
+    load_content_and_agents(update_existing=args.update_existing)
     step(6, "Checking everything")
     import subprocess
 
-    subprocess.run([sys.executable, str(ROOT / "scripts" / "check.py")])
+    subprocess.run([sys.executable, str(ROOT / "scripts" / "check.py")], check=True)
     say("\nDone. Start the demo with:  .\\start.ps1   (or: python -m mbpoc.run_all)")
     say("Optional: run the orchestrator as a Foundry hosted agent with:  .\\deploy-hosted.ps1")
 

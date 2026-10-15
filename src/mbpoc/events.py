@@ -12,7 +12,7 @@ import os
 
 _HOSTED = os.environ.get("ORCHESTRATOR_MODE", "local").lower() == "foundry"
 AGENTS = [
-    {"id": "mb_chat", "label": "MB Enterprise Chat", "role": "Front door (mock of the AWS-hosted agent)", "host": "AWS (simulated)"},
+    {"id": "mb_chat", "label": "MB Enterprise Chat", "role": "Direct forwarding + reply formatting (no model calls)", "host": "AWS (simulated)"},
     {"id": "orchestrator", "label": "Risk Assessment Orchestrator", "role": "Routes by confidence, risk and quality",
      "host": "Foundry hosted agent · Agent Framework" if _HOSTED else "Foundry / local service"},
     {"id": "risk", "label": "Risk Assessment Agent", "role": "Draft answer + confidence + risk (Foundry IQ)", "host": "Foundry"},
@@ -64,7 +64,7 @@ class Tracer:
 
     def _emit(self, kind: str, **fields: Any) -> None:
         try:
-            self._publish({"run_id": self.run_id, "kind": kind, **fields})
+            self._publish({"run_id": self.run_id, "kind": kind, "ts": time.time(), **fields})
         except Exception:  # tracing must never break the flow
             pass
 
@@ -88,6 +88,12 @@ class Tracer:
 
     def scores(self, **scores: Any) -> None:
         self._emit("scores", **scores)
+
+    def timing(self, agent: str, stage: str, duration_ms: int) -> None:
+        self._emit("timing", agent=agent, stage=stage, duration_ms=duration_ms)
+
+    def retrieval_scope(self, scope: dict) -> None:
+        self._emit("retrieval_scope", **scope)
 
     def decision(self, route: str, trigger: str, reasons: list[str]) -> None:
         self._emit("decision", route=route, trigger=trigger, reasons=reasons)

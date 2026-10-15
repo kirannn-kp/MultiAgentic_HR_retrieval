@@ -10,6 +10,7 @@ DEST = Path(__file__).resolve().parent / "src" / "risk-orchestrator"
 PKG = DEST / "mbpoc"
 
 FILES = ["__init__.py", "config.py", "contracts.py", "events.py", "policy.py",
+         "regional.py", "regional_retrieval.py",
          "agents/__init__.py", "agents/definitions.py", "agents/foundry.py", "agents/jsonutil.py",
          "agents/risk.py", "agents/evaluator.py", "agents/servicenow.py", "agents/mock_kb.py"]
 
@@ -21,4 +22,5 @@ for rel in FILES:
     shutil.copy2(ROOT / "src" / "mbpoc" / rel, target)
 (DEST / "config").mkdir(exist_ok=True)
 shutil.copy2(ROOT / "config" / "risk_criteria.yaml", DEST / "config" / "risk_criteria.yaml")
-print(f"synced {len(FILES)} modules + risk_criteria.yaml -> {DEST}")
+shutil.copy2(ROOT / "config" / "approved_web_sources.yaml", DEST / "config" / "approved_web_sources.yaml")
+print(f"synced {len(FILES)} modules + risk criteria and approved web sources -> {DEST}")

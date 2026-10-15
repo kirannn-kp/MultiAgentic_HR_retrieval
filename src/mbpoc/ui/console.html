@@ -44,6 +44,8 @@
   .testcase { padding:12px 16px; border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:8px; background:#fafbfc; }
   .testcase label { font-size:12px; color:var(--muted); font-weight:600; }
   .testcase .row { display:flex; gap:8px; }
+  #jurisdictionPicker:not([hidden]) { display:flex; flex-direction:column; gap:8px; }
+  #regionalNote { font-size:11px; color:var(--muted); line-height:1.4; }
   select { flex:1; min-width:0; padding:6px 8px; border:1px solid var(--border-strong); border-radius:3px; background:var(--surface); }
   #chat { padding:16px; display:flex; flex-direction:column; gap:12px; }
   .empty { color:var(--muted); text-align:center; margin-top:40px; padding:0 20px; }
@@ -135,6 +137,13 @@
   <section class="panel">
     <h2>MB Enterprise Chat <button class="link" id="reset">Clear</button></h2>
     <div class="testcase">
+      <div id="jurisdictionPicker" hidden>
+        <label for="jurisdiction">Question jurisdiction</label>
+        <select id="jurisdiction" aria-label="Question jurisdiction">
+          <option value="">Select Germany or European Union</option>
+        </select>
+        <div id="regionalNote"></div>
+      </div>
       <label for="cases">Test case</label>
       <div class="row">
         <select id="cases"></select>
@@ -276,6 +285,12 @@ function onEvent(e) {
       d.querySelector('.r').textContent = `${why}: ${e.reasons.join('; ')}`;
       log(e.ts, 'Routing decision', esc(`${esc_ ? 'Escalate' : 'Answer'} · ${why}. ${e.reasons.join('; ')}`), 'decision'); break; }
     case 'run_end': log(e.ts, 'Request finished', esc(e.status), 'run'); break;
+    case 'timing':
+      log(e.ts, name(e.agent), esc(`${e.stage}: ${(e.duration_ms / 1000).toFixed(2)} s`), '', 'timing'); break;
+    case 'retrieval_scope':
+      log(e.ts, 'Regional retrieval', esc(
+        `${e.jurisdiction} · ${e.approved_url_count} approved URLs\nAllowed: ${e.allowed_sources.join(', ')}\nExcluded: ${e.excluded_sources.join(', ') || 'none'}\nQueried: ${e.queried_sources.join(', ') || 'not yet reported'}`
+      ), '', e.mock ? 'offline plan' : 'scoped REST'); break;
   }
 }
 
@@ -297,12 +312,23 @@ function addMsg(role, text, status) {
 async function send(text) {
   if (!text.trim()) return;
   addMsg('user', text); $('input').value = ''; $('send').disabled = $('runCase').disabled = true;
-  const wait = addMsg('bot', 'Working on your request…');
+  const started = performance.now();
+  const wait = addMsg('bot', 'Request received. Checking sources and risk; the answer will appear after the checks finish.');
+  const elapsed = document.createElement('div'); wait.appendChild(elapsed);
+  const timer = setInterval(() => {
+    elapsed.textContent = `Elapsed: ${((performance.now() - started) / 1000).toFixed(0)} s`;
+  }, 1000);
   try {
-    const r = await fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ message: text }) });
+    const payload = { message: text };
+    if (cfg.regional_retrieval) payload.jurisdiction = $('jurisdiction').value || null;
+    const r = await fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const j = await r.json(); wait.remove(); addMsg('bot', j.reply, j.status);
   } catch (err) { wait.remove(); addMsg('bot', 'The request failed: ' + err, 'ERROR'); }
-  $('send').disabled = $('runCase').disabled = false; $('input').focus();
+  finally {
+    clearInterval(timer);
+    $('send').disabled = $('runCase').disabled = false; $('input').focus();
+  }
 }
 
 (async function init() {
@@ -312,6 +338,18 @@ async function send(text) {
   $('mode').textContent = meta.mock ? 'Offline simulation' : 'Live · Microsoft Foundry'; $('mode').className = 'pill ' + (meta.mock ? 'mock' : 'live');
   $('kbname').textContent = meta.knowledge_base;
   $('thr').textContent = `confidence ≥ ${meta.thresholds.confidence_min.toFixed(2)} · quality ≥ ${meta.thresholds.quality_min.toFixed(2)}`;
+  if (cfg.regional_retrieval) {
+    $('jurisdictionPicker').hidden = false;
+    meta.jurisdictions.forEach(region => {
+      const option = document.createElement('option'); option.value = region.value;
+      option.textContent = region.label + (region.value === 'DE' ? ' (+ applicable EU sources)' : ' only');
+      $('jurisdiction').appendChild(option);
+    });
+    $('regionalNote').textContent = meta.mock
+      ? 'Offline: demonstrates source routing and sample policy answers. Approved websites are not fetched.'
+      : 'Source exclusion uses a preview API. The original question is forwarded unchanged.';
+    EDGES.find(edge => edge[0] === 'risk' && edge[1] === 'kb')[2] = 'Scoped REST';
+  }
   buildFlow();
   cfg.scenarios.forEach(s => { const o = document.createElement('option'); o.value = s.message; o.textContent = s.label; $('cases').appendChild(o); });
   $('runCase').onclick = () => send($('cases').value);

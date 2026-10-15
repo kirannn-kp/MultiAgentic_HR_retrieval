@@ -6,6 +6,16 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 RiskLevel = Literal["LOW", "MEDIUM", "HIGH"]
+Jurisdiction = Literal["DE", "EU"]
+
+
+class RetrievalScope(BaseModel):
+    jurisdiction: Jurisdiction
+    allowed_sources: list[str]
+    excluded_sources: list[str]
+    queried_sources: list[str] = []
+    approved_url_count: int
+    mock: bool = False
 
 
 class Citation(BaseModel):
@@ -22,6 +32,7 @@ class RiskResult(BaseModel):
     risk_reasons: list[str] = []
     applicable_area: str = "general"
     citations: list[Citation] = []
+    retrieval: Optional[RetrievalScope] = None
 
 
 class QualityResult(BaseModel):

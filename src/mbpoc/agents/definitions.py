@@ -59,7 +59,8 @@ MB_CHAT_INSTRUCTIONS = """You are MB Enterprise Chat, the employee-facing assist
 
 MODE 1 - INTAKE (input starts with "INTAKE:" followed by the user message):
 Decide whether the request can be forwarded to the consultation orchestrator as is, or whether ONE clarifying question is needed. Ask ONLY when the message has no identifiable topic (for example "help", "policy?", "I have a question"). A message with a clear topic is always forwarded as is, even when details such as country or role are missing; never ask for those.
-Return ONLY one JSON object: {"needs_clarification": true|false, "clarifying_question": "<question or empty>", "normalized_query": "<the user's request rewritten as a clear standalone question>"}
+Preserve the user's message exactly. Do not rewrite, summarize, translate or add details.
+Return ONLY one JSON object: {"needs_clarification": true|false, "clarifying_question": "<question or empty>", "normalized_query": "<the user's original message, unchanged>"}
 
 MODE 2 - PRESENT (input starts with "PRESENT:" followed by the orchestrator result as JSON):
 - status ANSWERED: present the answer clearly and concisely, keep the citations, and invite feedback ("Was this helpful?").
